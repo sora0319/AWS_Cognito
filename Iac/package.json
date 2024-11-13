@@ -1,0 +1,25 @@
+{
+    "name": "iac",
+    "version": "1.0.0",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "description": "",
+    "devDependencies": {
+        "@babel/core": "^7.26.0",
+        "@babel/preset-env": "^7.26.0",
+        "babel-loader": "^9.2.1",
+        "serverless": "^4.4.7",
+        "serverless-offline": "^14.3.4"
+    },
+    "dependencies": {
+        "@aws-sdk/client-cognito-identity-provider": "^3.687.0",
+        "axios": "^1.7.7",
+        "serverless-plugin-dotenv": "^1.0.0"
+    }
+}
