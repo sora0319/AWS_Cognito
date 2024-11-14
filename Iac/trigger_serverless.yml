@@ -1,0 +1,37 @@
+service: ahimmoyak-auth-trigger
+
+provider:
+    name: aws
+    runtime: nodejs20.x
+    stage: ${opt:stage, "prod"}
+    region: ap-northeast-2
+    environment:
+        COGNITO_CLIENT_ID: ${env:COGNITO_CLIENT_ID}
+        COGNITO_USER_POOL_ID: ${env:COGNITO_USER_POOL_ID}
+    iamRoleStatements:
+        # Lambda 함수가 Cognito IDP 작업을 수행할 수 있는 권한
+        - Effect: "Allow"
+          Action:
+              - "cognito-idp:ListUsers"
+              - "cognito-idp:AdminCreateUser"
+          Resource: "arn:aws:cognito-idp:${self:provider.region}:${aws:accountId}:userpool/${self:provider.environment.COGNITO_USER_POOL_ID}"
+
+functions:
+    preSignUp:
+        handler: src/triggers/presignup.handler
+
+# Cognito가 Lambda 함수를 호출할 수 있도록 리소스 기반 정책 추가
+resources:
+    Resources:
+        PreSignUpLambdaPermission:
+            Type: AWS::Lambda::Permission
+            Properties:
+                FunctionName: ${self:service}-${self:provider.stage}-preSignUp
+                Principal: cognito-idp.amazonaws.com
+                Action: lambda:InvokeFunction
+                SourceArn: arn:aws:cognito-idp:${self:provider.region}:${aws:accountId}:userpool/${self:provider.environment.COGNITO_USER_POOL_ID}
+            DependsOn: PreSignUpLambdaFunction # Lambda 함수가 먼저 생성되도록 지정
+
+plugins:
+    - serverless-plugin-dotenv
+    - serverless-ignore
