@@ -1,0 +1,4 @@
+# .serverlessignore
+.env
+*.yml
+# !serverless.yml  # serverless.yml만 제외하지 않으려면 이 줄을 추가
