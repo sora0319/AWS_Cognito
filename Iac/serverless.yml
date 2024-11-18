@@ -10,6 +10,7 @@ provider:
         COGNITO_USER_POOL_ID: ${env:COGNITO_USER_POOL_ID} # Cognito 사용자 풀 ID
         GOOGLE_CLIENT_ID: ${env:GOOGLE_CLIENT_ID}
         GOOGLE_CLIENT_SECRET: ${env:GOOGLE_CLIENT_SECRET} # Google 클라이언트 시크릿
+        GOOGLE_REDIRECT_URI: ${env:GOOGLE_REDIRECT_URI}
     iamRoleStatements:
         - Effect: Allow
           Action:
@@ -27,8 +28,43 @@ functions:
                       origin: "*" # 허용할 오리진
                       headers: # 허용할 헤더
                           - Content-Type
-                          - Authorization
                       allowCredentials: true # 자격 증명 허용 (쿠키, 인증 헤더)
+
+    confirm:
+        handler: src/handlers/confirm.handler
+        events:
+            - http:
+                  path: confirm
+                  method: post
+                  cors:
+                      origin: "*" # 허용할 오리진
+                      headers: # 허용할 헤더
+                          - Content-Type
+                      allowCredentials: true
+
+    resendConfirmCode:
+        handler: src/handlers/resendConfirmCode.handler
+        events:
+            - http:
+                  path: resend
+                  method: post
+                  cors:
+                      origin: "*"
+                      headers:
+                          - ContentType
+                      allowCredentials: true
+
+    googleAuth: # Google 인증을 위한 새로운 함수
+        handler: src/handlers/googleAuth.handler
+        events:
+            - http:
+                  path: auth/google
+                  method: get
+                  cors: true
+            - http:
+                  path: auth/google/callback
+                  method: get
+                  cors: true # Google 인증 후 콜백 처리를 위한 엔드포인트
 
 plugins:
     - serverless-plugin-dotenv
