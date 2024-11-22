@@ -42,8 +42,25 @@ function SignUp() {
         }
     };
 
-    const handleGoogleSignUp = () => {
+    const handleGoogleSignUp = async () => {
         console.log("Sign up with Google");
+
+        try {
+            const response = await axios.get(`${API_URL}/auth/google`, {
+                withCredentials: true,
+            });
+
+            console.log(response);
+            if (response.status === 200) {
+                console.log("get url ok");
+                if (response.data.loginUrl) {
+                    window.location.href = response.data.loginUrl;
+                }
+            }
+        } catch (error) {
+            console.error("Error during Google login redirect:", error);
+            alert("Failed to initiate Google login. Please try again.");
+        }
     };
 
     const handleConfirmationSubmit = async (e) => {
