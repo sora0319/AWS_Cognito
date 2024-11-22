@@ -3,7 +3,7 @@ service: ahimmoyak-auth-service
 provider:
     name: aws
     runtime: nodejs20.x
-    stage: ${opt:stage, 'dev'}
+    stage: ${opt:stage, ""}
     region: ap-northeast-2
     environment:
         COGNITO_CLIENT_ID: ${env:COGNITO_CLIENT_ID}
@@ -11,11 +11,14 @@ provider:
         GOOGLE_CLIENT_ID: ${env:GOOGLE_CLIENT_ID}
         GOOGLE_CLIENT_SECRET: ${env:GOOGLE_CLIENT_SECRET} # Google 클라이언트 시크릿
         GOOGLE_REDIRECT_URI: ${env:GOOGLE_REDIRECT_URI}
+        GOOGLE_GROUP_NAME: ${env:GOOGLE_GROUP_NAME}
+        ACCESS_CONTROL_ALLOW_ORIGIN: ${env:ACCESS_CONTROL_ALLOW_ORIGIN}
     iamRoleStatements:
         - Effect: Allow
           Action:
               - cognito-idp:* # Cognito Identity Provider 서비스에 대한 모든 액션 허용
-          Resource: "*"
+          Resource:
+              - arn:aws:cognito-idp:${self:provider.region}:*:userpool/${env:COGNITO_USER_POOL_ID}
 
 functions:
     signup:
