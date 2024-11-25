@@ -1,6 +1,9 @@
 import { CognitoIdentityProviderClient, AdminCreateUserCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { randomBytes } from "crypto";
 import axios from "axios";
+import DataTransformer from "../utils/DataTransformer.js";
+import GoogleCognitoSignInService from "../service/googleSignInService.js";
+import GoogleCognitoSignUpService from "../service/googleSignUpService.js";
 
 // Cognito client init
 const cognitoClient = new CognitoIdentityProviderClient({ region: process.env.AWS_REGION });
@@ -9,8 +12,12 @@ const cognitoClient = new CognitoIdentityProviderClient({ region: process.env.AW
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 
 // Google login URL init
-const generateGoogleLoginUrl = (clientId, redirectUri) => {
-    const state = randomBytes(16).toString("hex"); // CSRF 방지를 위한 상태 토큰 생성
+const generateGoogleLoginUrl = (clientId, redirectUri, mode) => {
+    const randomToken = randomBytes(16).toString("hex"); // CSRF 방지를 위한 상태 토큰 생성
+    const requireMode = JSON.stringify({ mode });
+    const combinedData = { random: randomToken, requireMode };
+
+    const state = Buffer.from(JSON.stringify(combinedData)).toString("base64");
     const scope = "openid email profile"; // 요청할 Google 사용자 정보 범위
 
     const params = new URLSearchParams({
@@ -26,8 +33,10 @@ const generateGoogleLoginUrl = (clientId, redirectUri) => {
 
 export const handler = async (event) => {
     if (event.httpMethod === "GET" && event.path === "/auth/google") {
-        // Google 로그인 URL 생성 및 리디렉션
-        const loginUrl = generateGoogleLoginUrl(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_REDIRECT_URI);
+        const mode = event.queryStringParameters?.mode;
+
+        // Google URL 생성 및 리디렉션
+        const requiredUrl = generateGoogleLoginUrl(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_REDIRECT_URI, mode);
 
         return {
             statusCode: 200,
@@ -35,14 +44,33 @@ export const handler = async (event) => {
                 "Access-Control-Allow-Origin": "http://localhost:5173",
                 "Access-Control-Allow-Credentials": true,
             },
-            body: JSON.stringify({ loginUrl }),
+            body: JSON.stringify({ requiredUrl }),
         };
     }
 
     if (event.httpMethod === "GET" && event.path === "/auth/google/callback") {
         // Google OAuth 콜백 처리
         const code = event.queryStringParameters?.code;
-        console.log("post start");
+        const state = event.queryStringParameters?.state;
+
+        if (!code || !state) {
+            // 등록 취소시 행동 추가
+            return {
+                statusCode: 400,
+                body: JSON.stringify({ message: "Code and state are required" }),
+            };
+        }
+
+        // state mode encoding 및 조건 확인
+        const transformer = new DataTransformer();
+        const mode = transformer.decoding(state);
+
+        if (!["signup", "login"].includes(mode)) {
+            return {
+                statusCode: 400,
+                body: JSON.stringify({ message: "Invalid mode in state parameter" }),
+            };
+        }
 
         try {
             // Google 인증 코드를 토큰으로 교환
@@ -63,6 +91,8 @@ export const handler = async (event) => {
                 },
             });
 
+            const googlePayload = googleTokenInfoResponse.data;
+
             if (googlePayload.error) {
                 return {
                     statusCode: 401,
@@ -70,61 +100,58 @@ export const handler = async (event) => {
                 };
             }
 
-            const googlePayload = googleTokenInfoResponse.data;
             const { email, sub: googleId } = googlePayload;
 
-            //Cognito 에 이미 같은 username의 사용자 확인 및 등록
-            const createUserParams = {
-                UserPoolId: process.env.COGNITO_USER_POOL_ID,
-                Username: email,
-                UserAttributes: [
-                    { Name: "email", Value: email },
-                    { Name: "email_verified", Value: "true" },
-                    { Name: "custom:googleIdToken", Value: googleId }, // Mark email as verified
-                ],
-                MessageAction: "SUPPRESS", // Suppress email invitation
-            };
+            const signInService = new GoogleCognitoSignInService(process.env.AWS_REGION, process.env.COGNITO_CLIENT_ID);
+            const signUpService = new GoogleCognitoSignUpService(
+                process.env.AWS_REGION,
+                process.env.COGNITO_USER_POOL_ID,
+                process.env.GOOGLE_GROUP_NAME
+            );
 
-            try {
-                // Attempt to create a new Cognito user
-                await cognitoClient.send(new AdminCreateUserCommand(createUserParams));
-            } catch (error) {
-                if (error.name !== "UsernameExistsException") {
-                    throw error; // Ignore user already exists error
-                }
+            // 회원가입 또는 로그인 로직 실행
+            if (mode === "signup") {
+                await signUpService.handleGoogleSignUp(email, googleId);
             }
-
-            // 사용자를 구글 그룹에 추가
-            const addToGroupParams = {
-                UserPoolId: process.env.COGNITO_USER_POOL_ID,
-                GroupName: process.env.GOOGLE_GROUP_NAME,
-                Username: email,
-            };
-
-            await cognitoClient.send(new AdminAddUserToGroupCommand(addToGroupParams));
-
+            const tokens = await signInService.handleGoogleLogin(email, idToken);
             const cookieOptions = {
                 httpOnly: true, // JavaScript에서 쿠키에 접근할 수 없도록 설정
-                secure: true, // HTTPS를 통해서만 쿠키 전송
+                secure: false, // HTTPS를 통해서만 쿠키 전송 (true)
                 sameSite: "Strict", // CSRF 공격 방지
                 maxAge: 3600, // 쿠키 유효 기간 1시간
             };
 
             return {
-                statusCode: 200,
+                statusCode: 302,
                 headers: {
-                    "Set-Cookie": `accessToken=${AccessToken}; ${Object.entries(cookieOptions)
-                        .map(([key, value]) => `${key}=${value}`)
-                        .join("; ")}`,
-                    "Access-Control-Allow-Origin": event.headers.origin,
-                    "Access-Control-Allow-Credentials": true,
+                    "Set-Cookie": [
+                        `idToken=${tokens.idToken}; ${Object.entries(cookieOptions)
+                            .map(([key, value]) => `${key}=${value}`)
+                            .join("; ")}`,
+                        `accessToken=${tokens.accessToken}; ${Object.entries(cookieOptions)
+                            .map(([key, value]) => `${key}=${value}`)
+                            .join("; ")}`,
+                        `refreshToken=${tokens.refreshToken}; ${Object.entries(cookieOptions)
+                            .map(([key, value]) => `${key}=${value}`)
+                            .join("; ")}`,
+                    ].join(", "),
+                    Location: "http://localhost:5173", // 클라이언트로 리다이렉트할 URL
+                    "Access-Control-Allow-Origin": "http://localhost:5173",
+                    "Access-Control-Allow-Credentials": "true",
                 },
                 body: JSON.stringify({
-                    message: "Google SignUp Success",
-                    idToken: idToken,
-                    refreshToken: RefreshToken,
+                    message: "Tokens set in cookies successfully",
                 }),
             };
+
+            // const cookieOptions = {
+            //     httpOnly: true, // JavaScript에서 쿠키에 접근할 수 없도록 설정
+            //     secure: true, // HTTPS를 통해서만 쿠키 전송 (true)
+            //     sameSite: "None", // CSRF 공격 방지
+            //     maxAge: 3600, // 쿠키 유효 기간 1시간
+            //     domain: ".ahimmoyak.click",
+            //     path: "/", // 모든 경로에서 쿠키 사용 가능
+            // };
         } catch (error) {
             console.error("Google Login Error:", error);
             return {
