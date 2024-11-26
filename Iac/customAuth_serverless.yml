@@ -8,6 +8,9 @@ provider:
         COGNITO_USER_POOL_ID: ${env:COGNITO_USER_POOL_ID}
 
 functions:
+    DefineAuthChallenge:
+        handler: src/triggers/define-auth-challenge.handler
+
     CreateAuthChallenge:
         handler: src/triggers/create-auth-challenge.handler
 
@@ -16,6 +19,14 @@ functions:
 
 resources:
     Resources:
+        DefineAuthChallengePermission:
+            Type: AWS::Lambda::Permission
+            Properties:
+                FunctionName: !GetAtt DefineAuthChallengeLambdaFunction.Arn
+                Principal: cognito-idp.amazonaws.com
+                Action: lambda:InvokeFunction
+                SourceArn: arn:aws:cognito-idp:${self:provider.region}:${aws:accountId}:userpool/${self:provider.environment.COGNITO_USER_POOL_ID}
+            DependsOn: DefineAuthChallengeLambdaFunction
         CreateAuthChallengePermission:
             Type: AWS::Lambda::Permission
             Properties:
