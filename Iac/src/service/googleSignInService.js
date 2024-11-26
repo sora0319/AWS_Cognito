@@ -33,6 +33,10 @@ export default class GoogleCognitoSignInService {
 
         const respondResponse = await this.cognitoClient.send(new RespondToAuthChallengeCommand(respondParams));
 
+        if (!respondResponse.AuthenticationResult) {
+            throw new Error("Authentication failed. Unable to retrieve tokens.");
+        }
+
         return {
             accessToken: respondResponse.AuthenticationResult.AccessToken,
             idToken: respondResponse.AuthenticationResult.IdToken,
