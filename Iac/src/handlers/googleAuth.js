@@ -65,7 +65,7 @@ export const handler = async (event) => {
         const transformer = new DataTransformer();
         const mode = transformer.decoding(state);
 
-        if (!["signup", "login"].includes(mode)) {
+        if (!["signup", "signin"].includes(mode)) {
             return {
                 statusCode: 400,
                 body: JSON.stringify({ message: "Invalid mode in state parameter" }),
@@ -117,27 +117,29 @@ export const handler = async (event) => {
             const cookieOptions = {
                 httpOnly: true, // JavaScript에서 쿠키에 접근할 수 없도록 설정
                 secure: false, // HTTPS를 통해서만 쿠키 전송 (true)
-                sameSite: "Strict", // CSRF 공격 방지
+                sameSite: "Lax", // CSRF 공격 방지
                 maxAge: 3600, // 쿠키 유효 기간 1시간
+                path: "/",
             };
 
             return {
                 statusCode: 302,
                 headers: {
                     "Set-Cookie": [
-                        `idToken=${tokens.idToken}; ${Object.entries(cookieOptions)
+                        `accessToken=${tokens.accessToken}; ${Object.entries(cookieOptions)
                             .map(([key, value]) => `${key}=${value}`)
                             .join("; ")}`,
-                        `accessToken=${tokens.accessToken}; ${Object.entries(cookieOptions)
+                        `idToken=${tokens.idToken}; ${Object.entries(cookieOptions)
                             .map(([key, value]) => `${key}=${value}`)
                             .join("; ")}`,
                         `refreshToken=${tokens.refreshToken}; ${Object.entries(cookieOptions)
                             .map(([key, value]) => `${key}=${value}`)
                             .join("; ")}`,
-                    ].join(", "),
+                    ],
                     Location: "http://localhost:5173", // 클라이언트로 리다이렉트할 URL
                     "Access-Control-Allow-Origin": "http://localhost:5173",
                     "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Expose-Headers": "Set-Cookie", // Set-Cookie 헤더를 노출하도록 설정
                 },
                 body: JSON.stringify({
                     message: "Tokens set in cookies successfully",
