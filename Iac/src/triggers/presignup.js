@@ -17,7 +17,7 @@ export const handler = async (event) => {
         const command = new ListUsersCommand(params);
         const data = await cognitoClient.send(command);
 
-        if (data.Users && data.Users.length > 0) {
+        if (data.Users && data.Users.some((user) => user.UserStatus === "CONFIRMED")) {
             throw new Error("Email Already Exists");
         }
     } catch (error) {
