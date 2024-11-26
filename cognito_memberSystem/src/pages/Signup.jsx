@@ -46,15 +46,15 @@ function SignUp() {
         console.log("Sign up with Google");
 
         try {
-            const response = await axios.get(`${API_URL}/auth/google`, {
+            const response = await axios.get(`${API_URL}/auth/google?mode=signup`, {
                 withCredentials: true,
             });
 
             console.log(response);
             if (response.status === 200) {
                 console.log("get url ok");
-                if (response.data.loginUrl) {
-                    window.location.href = response.data.loginUrl;
+                if (response.data.requiredUrl) {
+                    window.location.href = response.data.requiredUrl;
                 }
             }
         } catch (error) {
