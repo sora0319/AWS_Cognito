@@ -25,15 +25,20 @@ class CognitoJwtValidator {
     async validateToken(token) {
         try {
             const decodedToken = jwt.decode(token, { complete: true });
+            console.log("decode validator : ", decodedToken);
             if (!decodedToken) {
                 throw new Error("Invalid token");
             }
 
+            // 서명 확인, 유효기간 확인
             const key = await this.getSigningKey(decodedToken.header.kid);
-            return jwt.verify(token, key.publicKey, {
+            const payload = jwt.verify(token, key.publicKey, {
                 algorithms: ["RS256"],
                 issuer: `https://cognito-idp.${this.cognitoConfig.region}.amazonaws.com/${this.cognitoConfig.userPoolId}`,
             });
+            console.log("payload : ", payload);
+
+            return payload; // 유효한 토큰인 경우 payload 반환
         } catch (error) {
             console.error("Token validation failed:", error);
             throw error;

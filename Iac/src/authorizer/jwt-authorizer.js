@@ -3,18 +3,25 @@ import CognitoJwtValidator from "./cognito-jwt-validator.js";
 
 export const handler = async (event) => {
     const validator = new CognitoJwtValidator();
-
+    console.log(event);
     try {
-        // Bearer 토큰 추출
-        const token = event.authorizationToken;
-        if (!token || !token.startsWith("Bearer ")) {
-            throw new Error("Unauthorized: Invalid or missing token");
+        // Cookie에서 accessToken 추출
+        const cookieHeader = event.authorizationToken;
+
+        if (!cookieHeader) {
+            throw new Error("Unauthorized: Missing cookie");
         }
-        const actualToken = token.split(" ")[1];
+        const cookies = parseCookies(cookieHeader);
+        const token = cookies["accessToken"];
+
+        if (!token) {
+            throw new Error("Unauthorized: Missing accessToken");
+        }
 
         // 토큰 검증
-        const decodedToken = await validator.validateToken(actualToken);
+        const decodedToken = await validator.validateToken(token);
         console.log(decodedToken);
+
         // IAM 정책 생성
         const policy = generateIAMPolicy(decodedToken.sub, "Allow", event.methodArn, {
             email: decodedToken.email,
@@ -26,6 +33,18 @@ export const handler = async (event) => {
         console.error("Authorization failed:", error);
         throw new Error("Unauthorized");
     }
+};
+
+// 쿠키 파싱 함수
+const parseCookies = (cookieHeader) => {
+    return cookieHeader
+        .split(";")
+        .map((cookie) => cookie.trim())
+        .reduce((acc, cookie) => {
+            const [key, value] = cookie.split("=");
+            acc[key] = value;
+            return acc;
+        }, {});
 };
 
 // IAM 정책 생성 함수
